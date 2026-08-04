@@ -2,9 +2,10 @@
 
 > Annotation-driven redaction for Java Records. Zero runtime dependencies, Java 17+.
 
+[![Maven Central](https://img.shields.io/maven-central/v/io.github.mabdulloh/off-the-record-core.svg?label=Maven%20Central)](https://central.sonatype.com/artifact/io.github.mabdulloh/off-the-record-core)
+[![CI](https://github.com/mabdulloh/off-the-record/actions/workflows/ci.yml/badge.svg)](https://github.com/mabdulloh/off-the-record/actions/workflows/ci.yml)
 [![Java Version](https://img.shields.io/badge/Java-17%2B-orange.svg)](https://openjdk.org/projects/jdk/17/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Status](https://img.shields.io/badge/Status-0.1.0--SNAPSHOT-yellow.svg)](docs/requirements-0.1.0.md)
 
 `off-the-record` turns a Record holding sensitive values into a redacted copy of the same type, so
 you can log it, print it, or hand it to a support tool without leaking PII.
@@ -13,8 +14,6 @@ you can log it, print it, or hand it to a support tool without leaking PII.
 UserDto safe = Masker.mask(user);
 log.info("checkout failed for {}", safe);
 ```
-
-Not published to Maven Central yet. See [Installation](#installation).
 
 ---
 
@@ -33,23 +32,23 @@ your typed objects, so the thing you get back is still a `UserDto`.
 
 ## Installation
 
-Nothing is on Maven Central yet, so build and install it locally:
-
-```bash
-git clone https://github.com/mabdulloh/off-the-record.git
-cd off-the-record
-mvn install
-```
-
-Then depend on the snapshot:
+Available on Maven Central.
 
 ```xml
 <dependency>
     <groupId>io.github.mabdulloh</groupId>
     <artifactId>off-the-record-core</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.1.0</version>
 </dependency>
 ```
+
+Gradle:
+
+```kotlin
+implementation("io.github.mabdulloh:off-the-record-core:0.1.0")
+```
+
+No transitive dependencies come with it.
 
 ## The annotation
 
@@ -236,25 +235,54 @@ Requires JDK 17 or newer. The library itself is compiled with `--release 17`.
 ## Releasing
 
 Publishing runs through the [Central Publisher Portal](https://central.sonatype.com), which replaced
-OSSRH when that was shut down on 30 June 2025. Everything it needs lives in the `release` profile, so a
+OSSRH when that was shut down on 30 June 2025. Everything it needs lives in the `publish` profile, so a
 normal build needs neither a GPG key nor a javadoc run.
 
 ```bash
-mvn -Prelease deploy
+mvn -Ppublish verify     # dry run: builds and signs the three jars, uploads nothing
+mvn -Ppublish deploy     # the real thing
 ```
 
-Before the first release:
+The upload is validated and then waits for you to press publish at
+[central.sonatype.com/publishing/deployments](https://central.sonatype.com/publishing/deployments). Flip
+`autoPublish` to `true` in the profile once you trust the pipeline.
 
-1. Claim the `io.github.mabdulloh` namespace in the Portal. It verifies ownership through the matching
-   GitHub account.
-2. Generate a user token and put it in `~/.m2/settings.xml` as a server with the id `central`, using the
-   token username and password rather than your account password.
-3. Publish a GPG key to a public keyserver and export the passphrase as `MAVEN_GPG_PASSPHRASE`.
-   `maven-gpg-plugin` 3.2+ fails the build if the passphrase is kept in `settings.xml`.
-4. Drop the `-SNAPSHOT` from the version in `pom.xml`. The release endpoint rejects snapshots.
+### One-time setup
 
-The upload is validated and then waits for you to press publish in the Portal. Flip `autoPublish` to
-`true` in the profile once you trust the pipeline.
+The Portal namespace, the token, and a non-`SNAPSHOT` version are already in place. What remains is a
+signing key.
+
+```bash
+# 1. Generate it. Choose RSA and RSA, 4096 bits, and an expiry you will actually renew.
+#    Use the same email as the <developer> entry in pom.xml.
+gpg --full-generate-key
+
+# 2. Note the long key id: the part after "sec rsa4096/" in the output.
+gpg --list-secret-keys --keyid-format LONG
+
+# 3. Publish the public half. Central verifies signatures against a keyserver, and this is the one
+#    it checks. Allow a few minutes for propagation before deploying.
+gpg --keyserver keyserver.ubuntu.com --send-keys <LONG_KEY_ID>
+```
+
+Then `mvn -Ppublish deploy` and let `gpg-agent` prompt for the passphrase. Nothing about the key goes
+into `pom.xml`, `settings.xml`, or the environment, which is the point: `maven-gpg-plugin` 3.2+ refuses
+to run if it finds the passphrase in your Maven configuration.
+
+For a non-interactive build, export `MAVEN_GPG_PASSPHRASE` instead. If gpg then complains it cannot
+prompt, add `pinentry-mode loopback` to `~/.gnupg/gpg.conf`.
+
+### Later, from CI
+
+`actions/setup-java` imports a key from a secret and writes the `central` server into `settings.xml`, so
+the same profile works unchanged. Export the private half once and store it as the secret:
+
+```bash
+gpg --armor --export-secret-keys <LONG_KEY_ID>
+```
+
+That output is your private key. Paste it straight into the repository secret; never commit it, and
+never paste it anywhere else.
 
 ## License
 

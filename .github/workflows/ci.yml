@@ -1,0 +1,26 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 17 is the baseline the library claims; 21 is the current LTS most consumers are on.
+        # Records and MethodHandles behave differently enough across releases to be worth both.
+        java: ['17', '21']
+    name: Test on JDK ${{ matrix.java }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up JDK ${{ matrix.java }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ matrix.java }}
+          distribution: 'temurin'
+          cache: 'maven'
+      - name: Verify
+        run: mvn --batch-mode --no-transfer-progress verify

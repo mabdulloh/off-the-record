@@ -90,24 +90,26 @@
 
     <!--
       Everything needed to publish to Maven Central, kept out of the default build so that a normal
-      `mvn verify` needs neither a GPG key nor a javadoc run.
+      `mvn verify` needs neither a GPG key nor a javadoc run. Profile id matches the converter project.
 
-          mvn -Prelease deploy
+          mvn -Ppublish verify     dry run: builds and signs the three jars, uploads nothing
+          mvn -Ppublish deploy     the real thing
 
       Prerequisites:
         1. A non-SNAPSHOT <version> above. Central rejects snapshots on the release endpoint.
         2. A Portal token in ~/.m2/settings.xml under <server><id>central</id>, using the token
            username and password from https://central.sonatype.com/account
-        3. A published GPG key, with the passphrase in the MAVEN_GPG_PASSPHRASE environment variable.
-           maven-gpg-plugin 3.2+ fails the build if the passphrase is stored in settings.xml.
+        3. A GPG key published to a keyserver. Locally, leave the passphrase out of Maven entirely and
+           let gpg-agent prompt for it. maven-gpg-plugin 3.2+ fails the build if the passphrase is kept
+           in settings.xml, and for CI it reads the MAVEN_GPG_PASSPHRASE environment variable instead.
 
       autoPublish is left at its default of false, so the upload is validated and then waits for you to
-      press publish at https://central.sonatype.com/publishing/deployments. Set it to true once the first
-      release has gone through and you trust the pipeline.
+      press publish at https://central.sonatype.com/publishing/deployments. Set it to true, as the
+      converter project does, once the first release has gone through and you trust the pipeline.
     -->
     <profiles>
         <profile>
-            <id>release</id>
+            <id>publish</id>
             <build>
                 <plugins>
                     <plugin>
