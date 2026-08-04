@@ -4,6 +4,7 @@
 
 [![Maven Central](https://img.shields.io/maven-central/v/io.github.mabdulloh/off-the-record-core.svg?label=Maven%20Central)](https://central.sonatype.com/artifact/io.github.mabdulloh/off-the-record-core)
 [![CI](https://github.com/mabdulloh/off-the-record/actions/workflows/ci.yml/badge.svg)](https://github.com/mabdulloh/off-the-record/actions/workflows/ci.yml)
+[![Coverage](https://codecov.io/gh/mabdulloh/off-the-record/branch/main/graph/badge.svg)](https://codecov.io/gh/mabdulloh/off-the-record)
 [![Java Version](https://img.shields.io/badge/Java-17%2B-orange.svg)](https://openjdk.org/projects/jdk/17/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 

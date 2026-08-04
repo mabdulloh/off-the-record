@@ -24,3 +24,13 @@ jobs:
           cache: 'maven'
       - name: Verify
         run: mvn --batch-mode --no-transfer-progress verify
+
+      # One leg only: both would upload the same report, and Codecov would just merge duplicates.
+      # fail_ci_if_error stays false so a coverage upload can never turn a green build red.
+      - name: Upload coverage to Codecov
+        if: matrix.java == '17'
+        uses: codecov/codecov-action@v7
+        with:
+          files: ./target/site/jacoco/jacoco.xml
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
