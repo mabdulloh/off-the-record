@@ -80,7 +80,7 @@ masked.email();   // "d********@company.com"   redacted
   rather than silently doing nothing.
 - **Keeps the shape.** An object reachable from two places yields one copy, and reference cycles
   terminate. If nothing changed, you get the original instance back rather than a needless copy.
-- **Zero runtime dependencies.** Pure Java 17: `java.lang.invoke`, `java.lang.reflect`, nothing else.
+- **Zero runtime dependencies.** Pure Java 17, nothing else.
 
 ## Examples
 
@@ -176,38 +176,6 @@ Collections work as the argument too:
 List<UserDto> maskedUsers = Masker.mask(users);
 ```
 
-### Custom strategies
-
-For anything the built-ins do not cover, implement `MaskStrategy`:
-
-```java
-public final class NikStrategy implements MaskStrategy {
-    @Override
-    public Object mask(Object value, MaskContext context) {
-        String nik = (String) value;
-        return nik.substring(0, 2) + "**********" + nik.substring(12);
-    }
-}
-
-public record Citizen(@Mask(with = NikStrategy.class) String nationalId) {}
-```
-
-One instance per strategy class is created and shared, so it must be stateless, thread safe, idempotent,
-and have a public no-arg constructor.
-
-The engine holds the guarantees so you do not have to: your strategy is never handed a `null`, a return
-value the property cannot hold becomes a full redaction, and anything you throw becomes a full redaction
-rather than reaching the caller.
-
-Unlike the built-ins, a custom strategy is not limited to `String`:
-
-```java
-public record Patient(@Mask(with = YearOnlyStrategy.class) LocalDate dateOfBirth) {}
-```
-
-`MaskType` implements `MaskStrategy` itself, so the four built-ins are ordinary strategies. If the SPI
-could not express them, it would not be enough for yours either.
-
 ## Configuration
 
 Everything is configured on the annotation.
@@ -261,6 +229,38 @@ The replacement character, used by every built-in except `NULLIFY` and by every 
 @Mask(value = PARTIAL, preserveEnd = 4, maskChar = '#') String card;   // "############8888"
 ```
 
+## Custom strategies
+
+For anything the built-ins do not cover, implement `MaskStrategy`:
+
+```java
+public final class NikStrategy implements MaskStrategy {
+    @Override
+    public Object mask(Object value, MaskContext context) {
+        String nik = (String) value;
+        return nik.substring(0, 2) + "**********" + nik.substring(12);
+    }
+}
+
+public record Citizen(@Mask(with = NikStrategy.class) String nationalId) {}
+```
+
+One instance per strategy class is created and shared, so it must be stateless, thread safe, idempotent,
+and have a public no-arg constructor.
+
+The engine holds the guarantees so you do not have to: your strategy is never handed a `null`, a return
+value the property cannot hold becomes a full redaction, and anything you throw becomes a full redaction
+rather than reaching the caller.
+
+Unlike the built-ins, a custom strategy is not limited to `String`:
+
+```java
+public record Patient(@Mask(with = YearOnlyStrategy.class) LocalDate dateOfBirth) {}
+```
+
+`MaskType` implements `MaskStrategy` itself, so the four built-ins are ordinary strategies. If the SPI
+could not express them, it would not be enough for yours either.
+
 ## Release history
 
 - **0.2.0** — unreleased. Plain class and JavaBean support, the public `MaskStrategy` SPI, and
@@ -276,16 +276,9 @@ knowing before you adopt it.
 
 Fork the repository and work on a feature branch. Pull requests are warmly welcome.
 
-Two things worth knowing before you open one. Every behaviour is pinned by a test, including every example
-in this file, so `mvn verify` should stay green. And the library never calls `setAccessible(true)`: that is
-the practice it exists to avoid, so a patch that reaches past a type's public API will not be merged.
-
 ## Links
 
 - Repository: https://github.com/mabdulloh/off-the-record
-- Issue tracker: https://github.com/mabdulloh/off-the-record/issues
-  - For a security issue, please email muhammad.abdulloh93@gmail.com directly rather than opening a
-    public issue.
 - Maven Central: https://central.sonatype.com/artifact/io.github.mabdulloh/off-the-record-core
 
 ## Licensing
