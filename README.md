@@ -233,6 +233,29 @@ mvn verify
 
 Requires JDK 17 or newer. The library itself is compiled with `--release 17`.
 
+## Releasing
+
+Publishing runs through the [Central Publisher Portal](https://central.sonatype.com), which replaced
+OSSRH when that was shut down on 30 June 2025. Everything it needs lives in the `release` profile, so a
+normal build needs neither a GPG key nor a javadoc run.
+
+```bash
+mvn -Prelease deploy
+```
+
+Before the first release:
+
+1. Claim the `io.github.mabdulloh` namespace in the Portal. It verifies ownership through the matching
+   GitHub account.
+2. Generate a user token and put it in `~/.m2/settings.xml` as a server with the id `central`, using the
+   token username and password rather than your account password.
+3. Publish a GPG key to a public keyserver and export the passphrase as `MAVEN_GPG_PASSPHRASE`.
+   `maven-gpg-plugin` 3.2+ fails the build if the passphrase is kept in `settings.xml`.
+4. Drop the `-SNAPSHOT` from the version in `pom.xml`. The release endpoint rejects snapshots.
+
+The upload is validated and then waits for you to press publish in the Portal. Flip `autoPublish` to
+`true` in the profile once you trust the pipeline.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).

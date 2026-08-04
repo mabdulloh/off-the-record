@@ -12,6 +12,8 @@ public class MaskingException extends RuntimeException {
     private static final long serialVersionUID = 1L;
 
     /**
+     * Creates an exception describing why masking could not complete.
+     *
      * @param message what went wrong, naming the record and component where relevant
      */
     public MaskingException(String message) {
@@ -19,6 +21,8 @@ public class MaskingException extends RuntimeException {
     }
 
     /**
+     * Creates an exception describing why masking could not complete, wrapping the underlying failure.
+     *
      * @param message what went wrong, naming the record and component where relevant
      * @param cause   the underlying failure
      */

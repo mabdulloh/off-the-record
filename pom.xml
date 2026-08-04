@@ -7,7 +7,7 @@
 
     <groupId>io.github.mabdulloh</groupId>
     <artifactId>off-the-record-core</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.1.0</version>
     <packaging>jar</packaging>
 
     <name>off-the-record-core</name>
@@ -21,6 +21,22 @@
             <distribution>repo</distribution>
         </license>
     </licenses>
+
+    <!-- developers and scm are not optional: Central rejects a deployment without them. -->
+    <developers>
+        <developer>
+            <name>Muhammad Abdulloh</name>
+            <email>muhammad.abdulloh93@gmail.com</email>
+            <url>https://github.com/mabdulloh</url>
+        </developer>
+    </developers>
+
+    <scm>
+        <connection>scm:git:https://github.com/mabdulloh/off-the-record.git</connection>
+        <developerConnection>scm:git:git@github.com:mabdulloh/off-the-record.git</developerConnection>
+        <url>https://github.com/mabdulloh/off-the-record</url>
+        <tag>HEAD</tag>
+    </scm>
 
     <properties>
         <maven.compiler.release>17</maven.compiler.release>
@@ -71,5 +87,84 @@
             </plugin>
         </plugins>
     </build>
+
+    <!--
+      Everything needed to publish to Maven Central, kept out of the default build so that a normal
+      `mvn verify` needs neither a GPG key nor a javadoc run.
+
+          mvn -Prelease deploy
+
+      Prerequisites:
+        1. A non-SNAPSHOT <version> above. Central rejects snapshots on the release endpoint.
+        2. A Portal token in ~/.m2/settings.xml under <server><id>central</id>, using the token
+           username and password from https://central.sonatype.com/account
+        3. A published GPG key, with the passphrase in the MAVEN_GPG_PASSPHRASE environment variable.
+           maven-gpg-plugin 3.2+ fails the build if the passphrase is stored in settings.xml.
+
+      autoPublish is left at its default of false, so the upload is validated and then waits for you to
+      press publish at https://central.sonatype.com/publishing/deployments. Set it to true once the first
+      release has gone through and you trust the pipeline.
+    -->
+    <profiles>
+        <profile>
+            <id>release</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-source-plugin</artifactId>
+                        <version>3.4.0</version>
+                        <executions>
+                            <execution>
+                                <id>attach-sources</id>
+                                <goals>
+                                    <goal>jar-no-fork</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-javadoc-plugin</artifactId>
+                        <version>3.12.0</version>
+                        <executions>
+                            <execution>
+                                <id>attach-javadocs</id>
+                                <goals>
+                                    <goal>jar</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-gpg-plugin</artifactId>
+                        <version>3.2.8</version>
+                        <executions>
+                            <execution>
+                                <id>sign-artifacts</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>sign</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+
+                    <plugin>
+                        <groupId>org.sonatype.central</groupId>
+                        <artifactId>central-publishing-maven-plugin</artifactId>
+                        <version>0.11.0</version>
+                        <extensions>true</extensions>
+                        <configuration>
+                            <publishingServerId>central</publishingServerId>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 
 </project>
