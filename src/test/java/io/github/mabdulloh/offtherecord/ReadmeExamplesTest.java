@@ -43,6 +43,21 @@ class ReadmeExamplesTest {
             @Mask(EMAIL) String email,
             @Mask(NULLIFY) String dropped) {}
 
+    record Contact(String name, @Mask(EMAIL) String email) {}
+
+    @Nested
+    @DisplayName("README: installing / getting started")
+    class GettingStarted {
+
+        @Test
+        void producesTheDocumentedOutputs() {
+            Contact masked = Masker.mask(new Contact("Abdulloh", "developer@company.com"));
+
+            assertEquals("Abdulloh", masked.name());
+            assertEquals("d********@company.com", masked.email());
+        }
+    }
+
     @Nested
     @DisplayName("README: mask types table")
     class MaskTypesTable {
