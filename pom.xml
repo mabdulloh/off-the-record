@@ -7,11 +7,11 @@
 
     <groupId>io.github.mabdulloh</groupId>
     <artifactId>off-the-record-core</artifactId>
-    <version>0.1.0</version>
+    <version>0.2.0-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <name>off-the-record-core</name>
-    <description>Annotation-driven redaction for Java Records. Zero runtime dependencies.</description>
+    <description>Annotation-driven redaction for Java records and beans. Zero runtime dependencies.</description>
     <url>https://github.com/mabdulloh/off-the-record</url>
 
     <licenses>
@@ -65,6 +65,19 @@
                         <arg>-Xlint:all</arg>
                     </compilerArgs>
                 </configuration>
+                <executions>
+                    <execution>
+                        <!--
+                          Tests only. The all-args copy mechanism matches constructor parameters by name,
+                          which needs -parameters, and the test beans have to be compiled that way to
+                          exercise it. The published classes are unaffected.
+                        -->
+                        <id>default-testCompile</id>
+                        <configuration>
+                            <parameters>true</parameters>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
 
             <plugin>
@@ -85,6 +98,31 @@
                     </archive>
                 </configuration>
             </plugin>
+
+            <!-- Jacoco -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>0.8.12</version> <!-- Use the latest version available -->
+                <executions>
+                    <!-- Prepares the property pointing to the JaCoCo runtime agent -->
+                    <execution>
+                        <id>prepare-agent</id>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <!-- Creates the code coverage report after tests run -->
+                    <execution>
+                        <id>report</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
         </plugins>
     </build>
 

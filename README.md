@@ -1,14 +1,14 @@
 # Off The Record
 
-> Annotation-driven redaction for Java Records. Zero runtime dependencies, Java 17+.
+> Annotation-driven redaction for Java records and beans. Zero runtime dependencies, Java 17+.
 
 [![Maven Central](https://img.shields.io/maven-central/v/io.github.mabdulloh/off-the-record-core.svg?label=Maven%20Central)](https://central.sonatype.com/artifact/io.github.mabdulloh/off-the-record-core)
 [![CI](https://github.com/mabdulloh/off-the-record/actions/workflows/ci.yml/badge.svg)](https://github.com/mabdulloh/off-the-record/actions/workflows/ci.yml)
 [![Java Version](https://img.shields.io/badge/Java-17%2B-orange.svg)](https://openjdk.org/projects/jdk/17/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-`off-the-record` turns a Record holding sensitive values into a redacted copy of the same type, so
-you can log it, print it, or hand it to a support tool without leaking PII.
+`off-the-record` turns a DTO holding sensitive values into a redacted copy of the same type, so you can
+log it, print it, or hand it to a support tool without leaking PII. Records and plain classes both work.
 
 ```java
 UserDto safe = Masker.mask(user);
@@ -52,21 +52,25 @@ No transitive dependencies come with it.
 
 ## The annotation
 
-Put `@Mask` on the Record components that hold sensitive values.
+Put `@Mask` on the properties that hold sensitive values: a record component, or a field, or its getter.
 
 ```java
 @Retention(RetentionPolicy.RUNTIME)
-@Target(ElementType.RECORD_COMPONENT)
+@Target({ElementType.RECORD_COMPONENT, ElementType.FIELD, ElementType.METHOD})
 public @interface Mask {
     MaskType value() default MaskType.REDACT_ALL;
+    Class<? extends MaskStrategy> with() default MaskStrategy.class;
     int preserveStart() default 0;
     int preserveEnd() default 0;
     char maskChar() default '*';
 }
 ```
 
-`preserveStart`, `preserveEnd`, and `maskChar` apply to `PARTIAL`. `maskChar` also applies to
-`EMAIL` and `REDACT_ALL`.
+`value()` picks a built-in; `with()` points at [your own strategy](#custom-strategies). They are mutually
+exclusive. `preserveStart`, `preserveEnd`, and `maskChar` apply to `PARTIAL`; `maskChar` also applies to
+`EMAIL`, to `REDACT_ALL`, and to every fail-closed redaction.
+
+On a class, annotate the field or the getter, never both.
 
 ## Mask types
 
@@ -81,7 +85,7 @@ public @interface Mask {
 
 ## Usage
 
-### Nested Records
+### Nested records
 
 ```java
 import io.github.mabdulloh.offtherecord.Mask;
@@ -120,7 +124,7 @@ masked.address().city();     // "Jakarta"
 masked.address().zipCode();  // "10***"                 nested Record, masked
 ```
 
-### Records inside collections
+### Inside collections
 
 `List`, `Set`, `Map` values, `Optional`, and object arrays are traversed for you.
 
@@ -146,18 +150,96 @@ You can also mask a collection directly:
 List<UserDto> maskedUsers = Masker.mask(users);
 ```
 
+### Plain classes
+
+Beans work the same way. Annotate the field or the getter, and you get back a copy of the same type:
+
+```java
+public class UserBean {
+    private String id;
+    @Mask(EMAIL) private String email;
+    @Mask(value = PARTIAL, preserveEnd = 4) private String creditCard;
+
+    public String getId() { return id; }
+    public void setId(String id) { this.id = id; }
+    public String getEmail() { return email; }
+    public void setEmail(String email) { this.email = email; }
+    public String getCreditCard() { return creditCard; }
+    public void setCreditCard(String creditCard) { this.creditCard = creditCard; }
+}
+
+UserBean masked = Masker.mask(user);   // "d********@company.com", "************8888"
+```
+
+Values are read through getters and written through the class's own public API, never by touching a field.
+That is the same reason this library exists, and it does not get suspended for classes.
+
+Copying uses whichever of these the class supports, in this order:
+
+| Mechanism | Needs |
+| :--- | :--- |
+| No-arg constructor plus setters | a getter and setter for every property. Preferred: it is the only one that can mask a reference cycle |
+| `toBuilder()` builder | a public `toBuilder()` and `build()`, plus a builder setter per property |
+| All-args constructor | parameter names matching the properties, so the class must be compiled with `-parameters` |
+
+Never by field order. `Class.getDeclaredFields()` is documented as returning fields in no particular
+order, so matching a constructor positionally would work on one JDK and silently swap two same-typed
+properties on another. An unmasked value landing in the wrong field is the one failure this library must
+not have, so when parameter names are unavailable it declines and says so.
+
+If a class supports none of the three, reading still works, so an object that needs no masking passes
+through untouched. Only one that actually changed and cannot be rebuilt fails.
+
+Inherited properties are masked too. Records and beans nest inside each other freely.
+
+### Custom strategies
+
+For anything the built-ins do not cover, implement `MaskStrategy`:
+
+```java
+public final class NikStrategy implements MaskStrategy {
+    @Override
+    public Object mask(Object value, MaskContext context) {
+        String nik = (String) value;
+        return nik.substring(0, 2) + "**********" + nik.substring(12);
+    }
+}
+
+public record Citizen(@Mask(with = NikStrategy.class) String nationalId) {}
+```
+
+One instance per strategy class is created and shared, so it must be stateless, thread safe, idempotent,
+and have a public no-arg constructor.
+
+The engine holds the guarantees so you do not have to. Your strategy is never handed a `null`. A return
+value the property cannot hold becomes a full redaction. Anything you throw, including a
+`ClassCastException` from a careless cast, becomes a full redaction rather than reaching the caller.
+
+Unlike the built-ins, a custom strategy is not restricted to `String`:
+
+```java
+public record Patient(@Mask(with = YearOnlyStrategy.class) LocalDate dateOfBirth) {}
+```
+
+`MaskType` implements `MaskStrategy` itself, so the four built-ins are ordinary strategies. If the SPI
+could not express them, it would not be enough for yours either.
+
 ## How it works
 
-Records are inspected once per type. The canonical constructor and the component accessors are
-resolved to `MethodHandle`s and cached in a `ClassValue`, keyed by the Record class. Subsequent calls
-read components through the cached handles, apply the mask, and invoke the cached constructor.
+Each class is inspected once. Accessors, setters, constructors, and builder methods are resolved to
+`MethodHandle`s and cached in a `ClassValue`, keyed by the class. Subsequent calls read through the cached
+handles, apply the mask, and rebuild through the cached constructor or setters.
 
 `ClassValue` rather than a `ConcurrentHashMap<Class<?>, ?>`: a map keyed by `Class` holds a strong
 reference to the class and, through it, its classloader, which leaks on redeploy in application
 servers.
 
-If no component of a Record actually changed, the original instance is returned rather than an
-identical copy.
+Each `mask()` call keeps an identity map of original to masked copy. That does two things. Reference
+cycles terminate, and an object reachable from two places yields one copy, so a diamond in the input stays
+a diamond in the output instead of quietly becoming a tree.
+
+If nothing actually changed, the original instance is returned rather than an identical copy. Anything
+from the JDK, and every enum constant, is left alone rather than walked into.
 
 No published benchmarks yet. When there are, they will report ns/op and allocation rate rather than a
 single headline multiplier.
@@ -166,18 +248,21 @@ single headline multiplier.
 
 **Fail closed.** No failure path returns the unmasked value.
 
-- A strategy that throws yields a full redaction.
-- A canonical constructor that rejects the masked values raises `MaskingException`. The original
-  object is not returned as a fallback.
-- Exceeding the traversal depth limit (32) raises `MaskingException`. This is also what catches
-  reference cycles.
+- A strategy that throws, or returns a value the property cannot hold, yields a full redaction.
+- A getter that throws yields a full redaction, rather than failing the call.
+- A constructor, setter, or builder that rejects the masked values raises `MaskingException`. The
+  original object is not returned as a fallback.
+- A reference cycle through a type that cannot be built blank and populated afterwards raises
+  `MaskingException`, naming the path it took.
 
 **Idempotent.** `mask(mask(x))` equals `mask(x)`.
 
-**Loud about misconfiguration.** `MaskingException` at first use, naming the record and component,
-if you put `PARTIAL`/`EMAIL`/`REDACT_ALL` on a non-`String` component, `NULLIFY` on a primitive, or an
-unusable preserve window: either bound negative, or a `preserveStart + preserveEnd` that overflows
-`int` and would otherwise slip past the "the window covers the whole value" check.
+**Loud about misconfiguration.** `MaskingException` at first use, naming the type and property, if you
+put `PARTIAL`/`EMAIL`/`REDACT_ALL` on a non-`String` property, `NULLIFY` on a primitive, `@Mask` on both a
+field and its getter, `@Mask` on a property with no getter, both `value()` and `with()`, a strategy with no
+public no-arg constructor, or an unusable preserve window: either bound negative, or a
+`preserveStart + preserveEnd` that overflows `int` and would otherwise slip past the "the window covers
+the whole value" check.
 
 **Defined edges.** `null` stays `null`. Empty strings stay empty under `PARTIAL` and `EMAIL`. When
 `preserveStart + preserveEnd` covers the whole value, everything is masked rather than nothing. A
@@ -185,38 +270,42 @@ single-character email local part is masked instead of preserved.
 
 ## Known limitations
 
-1. **Canonical constructor validation.** Masking rebuilds the Record through its canonical
-   constructor. A compact constructor that validates a masked component will reject the masked value
-   and masking will fail. Keep validation off masked components, or preserve enough of the format.
+1. **Validation on the write path.** Masking rebuilds through a canonical constructor, a setter, or a
+   builder. Anything that validates a masked property (regex, checksum, length) will reject the redacted
+   value and masking will fail. Keep validation off masked properties, or preserve enough of the format.
 2. **Map keys are not masked**, only values. Masking keys can collide and silently drop entries.
 3. **`PARTIAL` and `EMAIL` preserve length**, which reveals the original length. Use `REDACT_ALL`
    when the length itself is sensitive.
-4. **Records only.** Regular classes and JavaBeans are not supported in 0.1.0.
-5. **Declare collection components as interfaces** (`List`, `Set`, `Map`, `SortedSet`, `SortedMap`), not
-   as concrete types like `ArrayList` or `HashMap`. Masking returns unmodifiable copies, so a component
-   typed as a concrete class cannot hold the result and the canonical constructor will reject it.
-6. **Named modules** must `open` the package containing the Record, otherwise its canonical
-   constructor is not reachable.
-7. **This is redaction, not anonymization.** It is not encryption, tokenization, or pseudonymization,
+4. **A class needs one of the three copy mechanisms.** Private final fields with no builder, no setters,
+   and no name-matched constructor cannot be copied, because masking will not write fields directly.
+5. **Declare collection properties as interfaces** (`List`, `Set`, `Map`, `SortedSet`, `SortedMap`), not
+   as concrete types like `ArrayList` or `HashMap`. Masking returns unmodifiable copies, so a property
+   typed as a concrete class cannot hold the result.
+6. **Cycles need setters.** A cycle through records, builders, or all-args constructors cannot be masked:
+   the copy would have to exist before the values it is built from.
+7. **Named modules** must `open` the package containing the type, otherwise its constructor is not
+   reachable.
+8. **This is for DTOs, not entities.** Masking a JPA entity calls its getters, which with an open session
+   can trigger lazy loading and turn a `log.info` into an N+1. A getter that throws degrades to a
+   redaction rather than failing, but the right answer is to mask the DTO you were going to return anyway.
+9. **This is redaction, not anonymization.** It is not encryption, tokenization, or pseudonymization,
    and on its own it does not make data non-personal under any regulation.
 
-## Scope of 0.1.0
+## Scope
 
-In: the four mask types, nested Records, container traversal, fail-closed behaviour, the metadata
-cache.
+**0.1.0**: the four mask types, nested records, container traversal, fail-closed behaviour, the metadata
+cache. See [docs/requirements-0.1.0.md](docs/requirements-0.1.0.md).
 
-Out, on purpose: POJO support, Jackson and Spring Boot integrations, externalised policy for types
-you cannot annotate, role-conditional masking, custom strategies, compile-time codegen, tokenization.
+**0.2.0**: JavaBean support, the `MaskStrategy` SPI, identity-tracked traversal for cycles and shared
+references. See [docs/requirements-0.2.0.md](docs/requirements-0.2.0.md).
 
-Full requirements, including acceptance criteria, are in
-[docs/requirements-0.1.0.md](docs/requirements-0.1.0.md).
+Out, on purpose: Jackson and Spring Boot integrations, externalised policy for types you cannot annotate,
+role-conditional masking, compile-time codegen, tokenization, JPA awareness.
 
 ## Roadmap
 
 Nothing here is started. Order is intent, not commitment.
 
-- POJO and JavaBean support
-- `MaskStrategy` SPI so you can register your own
 - Jackson module, for masking at serialization time
 - Spring Boot starter, for masking REST responses
 - Logback and Log4j2 support

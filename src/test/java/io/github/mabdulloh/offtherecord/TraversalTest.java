@@ -45,6 +45,8 @@ class TraversalTest {
 
     record Node(String name, List<Node> children) {}
 
+    record Chain(Card card, List<Chain> next) {}
+
     record SortedHolder(SortedSet<Card> cards, SortedMap<String, Card> vault) {}
 
     record ConcreteHolder(ArrayList<Card> cards) {}
@@ -259,15 +261,21 @@ class TraversalTest {
         }
 
         @Test
-        void aGraphDeeperThanTheLimitFails() {
-            Node deepest = new Node("leaf", List.of());
-            Node current = deepest;
-            for (int i = 0; i < 40; i++) {
-                current = new Node("level-" + i, List.of(current));
+        void aDeepGraphIsNoLongerRefused() {
+            // 0.1.0 gave up past 32 levels, because a depth counter was standing in for cycle detection.
+            // Identity tracking replaced it, so depth on its own is no longer a limit.
+            Chain current = new Chain(new Card(CARD), List.of());
+            for (int i = 0; i < 100; i++) {
+                current = new Chain(null, List.of(current));
             }
-            Node root = current;
 
-            assertThrows(MaskingException.class, () -> Masker.mask(root));
+            Chain masked = Masker.mask(current);
+
+            Chain leaf = masked;
+            for (int i = 0; i < 100; i++) {
+                leaf = leaf.next().get(0);
+            }
+            assertEquals(MASKED, leaf.card().number());
         }
 
         @Test
