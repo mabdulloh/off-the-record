@@ -104,7 +104,8 @@ final class BeanMasker implements TypeMasker {
 
     @Override
     public Object mask(Object original, MaskingSession session) {
-        Object[] originals = new Object[properties.length];
+        // originals[] is only read in the BUILDER branch, so skip allocating it otherwise.
+        Object[] originals = mechanism == Mechanism.BUILDER ? new Object[properties.length] : null;
         Object[] masked = new Object[properties.length];
         boolean changed = false;
 
@@ -112,7 +113,11 @@ final class BeanMasker implements TypeMasker {
             Property property = properties[i];
             if (property.getter() == null) {
                 // Not readable, so not traversable. Only the NONE mechanism tolerates this, and NONE
-                // never rebuilds, so nothing is lost.
+                // never rebuilds, so nothing is lost. BUILDER rebuild skips this slot (FR-3.1).
+                if (originals != null) {
+                    originals[i] = null;
+                }
+                masked[i] = null;
                 continue;
             }
             Object value;
@@ -125,7 +130,9 @@ final class BeanMasker implements TypeMasker {
                 changed = true;
                 continue;
             }
-            originals[i] = value;
+            if (originals != null) {
+                originals[i] = value;
+            }
             masked[i] = property.rule() != null
                     ? property.rule().apply(value)
                     : session.maskChild(beanType.getSimpleName() + "." + property.name(), value);
@@ -156,6 +163,10 @@ final class BeanMasker implements TypeMasker {
                 case BUILDER -> {
                     Object partial = toBuilder.invoke(original);
                     for (int i = 0; i < properties.length; i++) {
+                        if (properties[i].getter() == null) {
+                            // Unreadable in the original, no value to copy through (FR-3.1).
+                            continue;
+                        }
                         if (masked[i] != originals[i]) {
                             properties[i].builderSetter().invoke(partial, masked[i]);
                         }

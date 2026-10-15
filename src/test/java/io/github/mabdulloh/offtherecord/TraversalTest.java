@@ -221,6 +221,25 @@ class TraversalTest {
             Masker.mask(new Holder(input, Set.of(), Map.of()));
             assertEquals(CARD, input.get(0).number());
         }
+
+        @Test
+        void aNullElementInsideAListStaysNull() {
+            List<String> masked = Masker.mask(java.util.Arrays.asList((String) null));
+
+            assertEquals(1, masked.size());
+            assertNull(masked.get(0));
+        }
+
+        record NestedOptional(Optional<Optional<Card>> card) {}
+
+        @Test
+        void aNestedOptionalMasksTheInnermostValue() {
+            NestedOptional masked = Masker.mask(
+                    new NestedOptional(Optional.of(Optional.of(new Card(CARD)))));
+
+            assertEquals(MASKED,
+                    masked.card().orElseThrow().orElseThrow().number());
+        }
     }
 
     @Nested

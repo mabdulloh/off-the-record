@@ -7,7 +7,7 @@
 
     <groupId>io.github.mabdulloh</groupId>
     <artifactId>off-the-record-core</artifactId>
-    <version>0.2.0</version>
+    <version>0.3.0</version>
     <packaging>jar</packaging>
 
     <name>off-the-record-core</name>

@@ -223,6 +223,45 @@ class BeanMaskingTest {
             assertEquals("acct_1", masked.getId());
             assertEquals(MASKED, masked.getCard());
         }
+
+        /**
+         * A builder bean with one property that has no getter on the bean itself. Mechanism selection
+         * must fall through to NONE rather than pick BUILDER and try to copy the unreadable property,
+         * because BUILDER requires every property to be readable.
+         */
+        static final class BuilderWithUnreadableProperty {
+            @Mask private final String id;
+            private final String card;        // no getter
+
+            private BuilderWithUnreadableProperty(Builder builder) {
+                this.id = builder.id;
+                this.card = builder.card;
+            }
+
+            public String getId() { return id; }
+            // no getCard()
+
+            public Builder toBuilder() { return new Builder().id(id).card(card); }
+
+            public static final class Builder {
+                private String id;
+                private String card;
+
+                public Builder id(String id) { this.id = id; return this; }
+                public Builder card(String card) { this.card = card; return this; }
+                public BuilderWithUnreadableProperty build() { return new BuilderWithUnreadableProperty(this); }
+            }
+        }
+
+        @Test
+        void doesNotPickTheBuilderMechanismWhenOnePropertyIsUnreadable() {
+            MaskingException thrown = assertThrows(MaskingException.class,
+                    () -> Masker.mask(new BuilderWithUnreadableProperty.Builder()
+                            .id("acct_1").card(CARD).build()));
+
+            assertTrue(thrown.getMessage().contains("BuilderWithUnreadableProperty"), thrown.getMessage());
+            assertTrue(thrown.getMessage().contains("getter"), thrown.getMessage());
+        }
     }
 
     @Nested
@@ -284,6 +323,33 @@ class BeanMaskingTest {
                     assertThrows(MaskingException.class, () -> Masker.mask(new NoGetter()));
 
             assertTrue(thrown.getMessage().contains("no getter"), thrown.getMessage());
+        }
+
+        /** Superclass annotates a package-private field; subclass annotates the shadowed field again. */
+        abstract static class EmailBearer {
+            @Mask(EMAIL) String email;
+            public String getEmail() { return email; }
+            public void setEmail(String email) { this.email = email; }
+        }
+
+        static final class EmailBearerShadowed extends EmailBearer {
+            @Mask(EMAIL) String email;
+
+            @Override
+            public String getEmail() { return email; }
+            @Override
+            public void setEmail(String email) { this.email = email; }
+        }
+
+        @Test
+        void rejectsReAnnotatingAnInheritedProperty() {
+            EmailBearerShadowed bean = new EmailBearerShadowed();
+            bean.setEmail("developer@company.com");
+
+            MaskingException thrown = assertThrows(MaskingException.class, () -> Masker.mask(bean));
+
+            assertTrue(thrown.getMessage().contains("more than one place"), thrown.getMessage());
+            assertTrue(thrown.getMessage().contains("email"), thrown.getMessage());
         }
     }
 
@@ -353,6 +419,37 @@ class BeanMaskingTest {
 
             assertEquals("usr_1", masked.getId());
             assertEquals("********", masked.getSecret());
+        }
+    }
+
+    @Nested
+    @DisplayName("Getter that transforms the field value")
+    class GetterTransforms {
+
+        /** Stores raw whitespace and case; getter returns the trimmed, lowercased form. */
+        static final class Normalised {
+            String email = "  Developer@COMPANY.com  ";
+
+            @Mask(EMAIL)
+            public String getEmail() { return email.trim().toLowerCase(); }
+            public void setEmail(String email) { this.email = email; }
+        }
+
+        @Test
+        void masksTheValueTheGetterReturnsNotTheStoredField() {
+            String masked = Masker.mask(new Normalised()).getEmail();
+
+            // "developer@company.com" masked as EMAIL is "d" + 8 stars + "@company.com".
+            assertEquals("d********@company.com", masked);
+        }
+
+        @Test
+        void doesNotTouchTheRawStoredValue() {
+            Normalised original = new Normalised();
+
+            Masker.mask(original);
+
+            assertEquals("  Developer@COMPANY.com  ", original.email);
         }
     }
 

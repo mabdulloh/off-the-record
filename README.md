@@ -38,14 +38,14 @@ typed objects, so what comes back still type-checks.
 <dependency>
     <groupId>io.github.mabdulloh</groupId>
     <artifactId>off-the-record-core</artifactId>
-    <version>0.1.0</version>
+    <version>0.3.0</version>
 </dependency>
 ```
 
 Gradle:
 
 ```kotlin
-implementation("io.github.mabdulloh:off-the-record-core:0.1.0")
+implementation("io.github.mabdulloh:off-the-record-core:0.3.0")
 ```
 
 Nothing comes with it: no transitive dependencies, no configuration, no setup step.
@@ -263,11 +263,17 @@ could not express them, it would not be enough for yours either.
 
 ## Release history
 
-- **0.2.0** — unreleased. Plain class and JavaBean support, the public `MaskStrategy` SPI, and
-  identity-tracked traversal so cycles and shared references keep the graph's shape.
+- **0.3.0** — audit fixes. Closes six gaps the 0.2.0 review named: builder-copied beans with unreadable
+  properties fall through to NONE, the `SETTERS` path no longer allocates a parallel `originals[]`,
+  re-annotation of an inherited property is now tested, the value the getter returns (not the field) is
+  what gets masked, `List.of(null)` and nested `Optional<Optional<X>>` are covered, and
+  `MaskContext.toString()` has its own test. No public surface change.
+  [Requirements](docs/requirements-0.3.0.md).
+- **0.2.0** — Plain class and JavaBean support, the public `MaskStrategy` SPI, and identity-tracked
+  traversal so cycles and shared references keep the graph's shape.
   [Requirements](docs/requirements-0.2.0.md).
-- **0.1.0** — current release. The four built-in strategies, nested records, container traversal, and
-  fail-closed behaviour. [Requirements](docs/requirements-0.1.0.md).
+- **0.1.0** — The four built-in strategies, nested records, container traversal, and fail-closed
+  behaviour. [Requirements](docs/requirements-0.1.0.md).
 
 Each requirements document lists what the release deliberately does not do, and the limitations worth
 knowing before you adopt it.

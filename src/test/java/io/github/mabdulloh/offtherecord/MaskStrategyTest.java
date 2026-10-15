@@ -222,6 +222,13 @@ class MaskStrategyTest {
             assertEquals('#', seen.maskChar());
             assertEquals("Described.nationalId", seen.toString());
         }
+
+        @Test
+        void toStringFormatsDeclaringTypeDotPropertyName() {
+            MaskContext context = new MaskContext("email", String.class, String.class, 0, 0, '*');
+
+            assertEquals("String.email", context.toString());
+        }
     }
 
     @Nested
